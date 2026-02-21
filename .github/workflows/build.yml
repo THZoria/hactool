@@ -1,48 +1,63 @@
 on: [push, pull_request]
 
 jobs:
-  main:
+  build:
+    name: hactool-${{ matrix.job_name }}
+    runs-on: ${{ matrix.os }}
+
     strategy:
       fail-fast: false
       matrix:
-        job_name: ['linux', 'windows', 'macos']
-
         include:
-        - job_name: linux
-          os: ubuntu-latest
-          shell: bash {0}
-
-        - job_name: windows
-          os: windows-latest
-          shell: msys2 {0}
-
-        - job_name: macos
-          os: macos-latest
-          shell: bash {0}
+          - os: ubuntu-latest
+            job_name: linux
+            shell: bash
+          - os: windows-latest
+            job_name: windows
+            shell: msys2 {0}
+          - os: macos-latest
+            job_name: macos
+            shell: bash
 
     defaults:
       run:
         shell: ${{ matrix.shell }}
 
-    name: hactool-${{ matrix.job_name }}
-    runs-on: ${{ matrix.os }}
-
     steps:
-    - uses: msys2/setup-msys2@v2
-      if: matrix.os == 'windows-latest'
-      with:
-        path-type: inherit
-        msystem: MINGW64
-        update: true
-        install: mingw-w64-x86_64-gcc mingw-w64-x86_64-make
+      - uses: actions/checkout@v4
 
-    - uses: actions/checkout@v1
+      - name: Setup MSYS2
+        if: matrix.os == 'windows-latest'
+        uses: msys2/setup-msys2@v2
+        with:
+          path-type: inherit
+          msystem: MINGW64
+          update: true
+          install: >
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+            mingw-w64-x86_64-binutils
 
-    - run: |
-        mv config.mk.template config.mk
-        make -j$(nproc)
+      - name: Build
+        run: |
+          mv config.mk.template config.mk
+          make -j2
 
-    - uses: actions/upload-artifact@v2
-      with:
-        name: hactool-${{ matrix.job_name }}
-        path: hactool*
+      - name: Rename binary
+        run: |
+          if [ "${{ matrix.job_name }}" = "windows" ]; then
+            mv hactool.exe hactool-windows.exe
+          elif [ "${{ matrix.job_name }}" = "linux" ]; then
+            mv hactool hactool-linux
+          elif [ "${{ matrix.job_name }}" = "macos" ]; then
+            mv hactool hactool-macos
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hactool-${{ matrix.job_name }}
+          path: |
+            hactool-windows.exe
+            hactool-linux
+            hactool-macos
